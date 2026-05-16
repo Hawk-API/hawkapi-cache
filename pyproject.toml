@@ -1,0 +1,74 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "hawkapi-cache"
+version = "0.1.0"
+description = "Response caching for HawkAPI — decorator + middleware + Redis/memory backends + tag-based invalidation"
+readme = "README.md"
+license = { file = "LICENSE" }
+requires-python = ">=3.12"
+authors = [
+    { name = "HawkAPI Contributors", email = "hawkapi@users.noreply.github.com" },
+]
+keywords = ["hawkapi", "cache", "redis", "response-cache", "http-cache"]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Framework :: AsyncIO",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Internet :: WWW/HTTP",
+    "Typing :: Typed",
+]
+dependencies = [
+    "hawkapi>=0.1.7",
+    "msgpack>=1.0",
+]
+
+[project.urls]
+Homepage = "https://pypi.org/project/hawkapi-cache/"
+Repository = "https://github.com/ashimov/hawkapi-cache"
+Issues = "https://github.com/ashimov/hawkapi-cache/issues"
+
+[project.optional-dependencies]
+redis = ["redis>=5.0"]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.24",
+    "httpx>=0.27",
+    "fakeredis>=2.20",
+    "redis>=5.0",
+    "ruff>=0.8",
+    "pyright>=1.1",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/hawkapi_cache"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+filterwarnings = ["ignore::DeprecationWarning"]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "S"]
+ignore = ["S101"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S"]
+
+[tool.pyright]
+pythonVersion = "3.12"
+typeCheckingMode = "strict"
+# msgpack ships without type stubs; per-call ignores are noisy.
+reportUnknownVariableType = false
+reportUnknownMemberType = false
+reportUnknownArgumentType = false

@@ -6,7 +6,7 @@ backends (in-memory + Redis) with tag-based invalidation.
 
 from __future__ import annotations
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 from hawkapi_cache._backends import CacheBackend, MemoryCacheBackend
 from hawkapi_cache._decorator import cache

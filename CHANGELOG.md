@@ -1,5 +1,29 @@
 # Changelog
 
+## [0.2.0] - 2026-05-16
+
+Security hardening.
+
+### Changed
+
+- Corrupt cache entries no longer raise — `decode()` failures are logged and
+  treated as a miss so the handler is invoked to repopulate (CWE-502).
+- `decode()` enforces conservative msgpack size limits
+  (`max_bin_len` / `max_str_len` = 10 MiB, `max_array_len` / `max_map_len`
+  = 1024) to prevent decompression-style memory blow-ups.
+- The `@cache` decorator now prepends `plugin.key_prefix` to the computed
+  cache key — previously `key_prefix` was ignored, breaking namespacing
+  (CWE-436).
+- CR / LF characters are stripped from cached header values during decode,
+  closing a response-splitting vector if a corrupt entry was ever served
+  (CWE-444).
+- Cached responses carry `Cache-Control: no-store` by default so downstream
+  caches don't re-store our replays.
+- `on_startup` / `on_shutdown` now run the backend coroutine to completion
+  instead of fire-and-forgetting it, so backend `close()` actually flushes.
+- The active-plugin registry uses `WeakKeyDictionary` to eliminate the
+  `id(app)` ABA hazard.
+
 ## [0.1.0] - 2026-05-16
 
 Initial release.

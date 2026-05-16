@@ -3,17 +3,55 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
+import threading
 from typing import TYPE_CHECKING, Any
+from weakref import WeakKeyDictionary
 
 from hawkapi.plugins import Plugin
 
 from hawkapi_cache._backends import CacheBackend, MemoryCacheBackend
 
 if TYPE_CHECKING:
-    from collections.abc import Sequence
+    from collections.abc import Coroutine, Sequence
 
 logger = logging.getLogger("hawkapi_cache")
+
+
+def _run_to_completion(coro: Coroutine[Any, Any, Any]) -> None:
+    """Run *coro* to completion, regardless of caller event-loop context.
+
+    The HawkAPI plugin runner calls ``on_startup`` / ``on_shutdown``
+    synchronously from inside an awaited shutdown hook, so we can't
+    ``await`` here and we can't call ``asyncio.run`` while a loop is
+    already running. Spinning a one-shot thread with its own loop is the
+    only sound way to actually wait for ``backend.close()`` to finish
+    rather than fire-and-forgetting it.
+    """
+    try:
+        asyncio.get_running_loop()
+        in_loop = True
+    except RuntimeError:
+        in_loop = False
+
+    if not in_loop:
+        asyncio.run(coro)
+        return
+
+    error: list[BaseException] = []
+
+    def _runner() -> None:
+        try:
+            asyncio.run(coro)
+        except BaseException as exc:  # noqa: BLE001
+            error.append(exc)
+
+    thread = threading.Thread(target=_runner, name="hawkapi-cache-lifecycle", daemon=True)
+    thread.start()
+    thread.join()
+    if error:
+        raise error[0]
 
 
 class _StateNamespace:
@@ -47,26 +85,10 @@ class CachePlugin(Plugin):
         return spec
 
     def on_startup(self) -> None:
-        coro = self.backend.start()
-        try:
-            loop = asyncio.get_running_loop()
-        except RuntimeError:
-            loop = None
-        if loop is not None:
-            loop.create_task(coro)
-        else:
-            asyncio.run(coro)
+        _run_to_completion(self.backend.start())
 
     def on_shutdown(self) -> None:
-        coro = self.backend.close()
-        try:
-            loop = asyncio.get_running_loop()
-        except RuntimeError:
-            loop = None
-        if loop is not None:
-            loop.create_task(coro)
-        else:
-            asyncio.run(coro)
+        _run_to_completion(self.backend.close())
 
     def on_exception(self, request: Any, exc: Exception) -> None:
         return None
@@ -96,11 +118,14 @@ class CachePlugin(Plugin):
         app.state.cache = self
         # Module-level lookup so the ``@cache`` decorator can find the plugin
         # without relying on ``scope["app"]`` (which TestClient doesn't set).
-        _ACTIVE_PLUGINS[id(app)] = self
+        with contextlib.suppress(TypeError):
+            _ACTIVE_PLUGINS[app] = self
         _LAST_PLUGIN[0] = self
 
 
-_ACTIVE_PLUGINS: dict[int, CachePlugin] = {}
+# WeakKeyDictionary avoids the ABA hazard where ``id(app)`` is reused after
+# the original app object is garbage-collected.
+_ACTIVE_PLUGINS: WeakKeyDictionary[Any, CachePlugin] = WeakKeyDictionary()
 _LAST_PLUGIN: list[CachePlugin | None] = [None]
 
 
@@ -108,12 +133,15 @@ def resolve_plugin(app: Any) -> CachePlugin | None:
     """Look up the cache plugin for *app*, or the last-attached one as a fallback.
 
     TestClient does not populate ``scope["app"]``, so the decorator cannot rely
-    on the request alone. The module-level registry keyed by ``id(app)``
-    handles multi-app processes; ``_LAST_PLUGIN`` is the common single-app
-    fast path.
+    on the request alone. The module-level registry is keyed by the app
+    instance via :class:`WeakKeyDictionary`; ``_LAST_PLUGIN`` is the common
+    single-app fast path.
     """
     if app is not None:
-        plugin = _ACTIVE_PLUGINS.get(id(app))
+        try:
+            plugin = _ACTIVE_PLUGINS.get(app)
+        except TypeError:
+            plugin = None
         if plugin is not None:
             return plugin
     return _LAST_PLUGIN[0]

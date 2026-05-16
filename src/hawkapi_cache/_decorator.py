@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import inspect
+import logging
 from collections.abc import Awaitable, Callable
 from functools import wraps
 from typing import TYPE_CHECKING, Any, ParamSpec, TypeVar
@@ -29,6 +30,8 @@ if TYPE_CHECKING:
 
 P = ParamSpec("P")
 R = TypeVar("R")
+
+logger = logging.getLogger("hawkapi_cache")
 
 _CACHEABLE_METHODS = frozenset({"GET", "HEAD"})
 
@@ -84,19 +87,34 @@ def cache(
             if plugin is None:
                 return await handler(*args, **kwargs)
 
-            cache_key = (
+            base_key = (
                 key_func(request) if key_func is not None else _build_default_key(request, vary)
             )
+            cache_key = plugin.key_prefix + base_key
 
             cached = await plugin.backend.get(cache_key)
+            decoded: tuple[int, list[tuple[bytes, bytes]], bytes] | None = None
             if cached is not None:
-                status, headers, body = decode(cached)
+                try:
+                    decoded = decode(cached)
+                except Exception as exc:
+                    # Corrupt entry — log + treat as miss, never propagate.
+                    logger.warning(
+                        "cache: corrupt entry for key %s, treating as miss: %s",
+                        cache_key,
+                        exc,
+                    )
+            if decoded is not None:
+                status, headers, body = decoded
                 rebuilt = Response(
                     content=body,
                     status_code=status,
                 )
                 rebuilt._headers = _headers_to_dict(headers)  # pyright: ignore[reportPrivateUsage]
                 rebuilt._headers["x-cache"] = "HIT"  # pyright: ignore[reportPrivateUsage]
+                # Cached responses must not themselves be revalidated by
+                # downstream caches (the handler already controlled freshness).
+                rebuilt._headers.setdefault("cache-control", "no-store")  # pyright: ignore[reportPrivateUsage]
                 return rebuilt
 
             result = await handler(*args, **kwargs)
@@ -148,7 +166,12 @@ def _get_plugin(request: Request) -> Any:
 
 
 def _headers_to_dict(headers: list[tuple[bytes, bytes]]) -> dict[str, str]:
-    return {k.decode("latin-1"): v.decode("latin-1") for k, v in headers}
+    # Strip CR/LF from cached header values — a malicious entry must not be
+    # able to inject new headers or split the response (CWE-444).
+    return {
+        k.decode("latin-1"): v.decode("latin-1").replace("\r", "").replace("\n", "")
+        for k, v in headers
+    }
 
 
 def _coerce_response(result: Any) -> Any | None:

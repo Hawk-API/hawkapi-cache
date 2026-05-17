@@ -38,4 +38,4 @@ Initial release.
 - `X-Cache: HIT` / `MISS` response header.
 - Only `GET` / `HEAD` + 2xx responses are cached; other methods and statuses pass through.
 
-[0.1.0]: https://github.com/ashimov/hawkapi-cache/releases/tag/v0.1.0
+[0.1.0]: https://github.com/Hawk-API/hawkapi-cache/releases/tag/v0.1.0

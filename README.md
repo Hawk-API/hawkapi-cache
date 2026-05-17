@@ -1,6 +1,6 @@
 # hawkapi-cache
 
-Response caching for [HawkAPI](https://github.com/ashimov/HawkAPI) — decorator + middleware + Redis/memory backends + tag-based invalidation.
+Response caching for [HawkAPI](https://github.com/Hawk-API/HawkAPI) — decorator + middleware + Redis/memory backends + tag-based invalidation.
 
 ## Install
 
@@ -100,7 +100,7 @@ Multi-process safe. Tag index uses Redis SETs; `invalidate_tags` is a pipelined 
 ## Development
 
 ```bash
-git clone https://github.com/ashimov/hawkapi-cache.git
+git clone https://github.com/Hawk-API/hawkapi-cache.git
 cd hawkapi-cache
 uv sync --extra dev
 uv run pytest -q

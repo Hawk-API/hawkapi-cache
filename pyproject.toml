@@ -31,8 +31,8 @@ dependencies = [
 
 [project.urls]
 Homepage = "https://pypi.org/project/hawkapi-cache/"
-Repository = "https://github.com/ashimov/hawkapi-cache"
-Issues = "https://github.com/ashimov/hawkapi-cache/issues"
+Repository = "https://github.com/Hawk-API/hawkapi-cache"
+Issues = "https://github.com/Hawk-API/hawkapi-cache/issues"
 
 [project.optional-dependencies]
 redis = ["redis>=5.0"]

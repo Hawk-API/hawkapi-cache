@@ -6,12 +6,17 @@ backends (in-memory + Redis) with tag-based invalidation.
 
 from __future__ import annotations
 
-__version__ = "0.2.0"
+from importlib.metadata import PackageNotFoundError, version
 
 from hawkapi_cache._backends import CacheBackend, MemoryCacheBackend
 from hawkapi_cache._decorator import cache
 from hawkapi_cache._plugin import CachePlugin, init_cache
 from hawkapi_cache._redis import RedisCacheBackend
+
+try:
+    __version__ = version("hawkapi-cache")
+except PackageNotFoundError:  # pragma: no cover - running from a source tree without install
+    __version__ = "0.0.0"
 
 __all__ = [
     "CacheBackend",

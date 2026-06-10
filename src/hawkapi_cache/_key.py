@@ -8,6 +8,10 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
+# Cap interpolated path-param values so a hostile path cannot inflate the
+# Redis tag-key namespace with unbounded-length keys.
+_MAX_TAG_LEN = 256
+
 
 def make_key(
     method: str,
@@ -27,10 +31,12 @@ def make_key(
 
 def interpolate_tags(tags: Sequence[str], path_params: dict[str, Any]) -> list[str]:
     """Substitute ``{name}`` placeholders in tag strings with path-param values."""
+    # Cap each value so a hostile path segment cannot produce an unbounded tag key.
+    capped = {k: str(v)[:_MAX_TAG_LEN] for k, v in path_params.items()}
     out: list[str] = []
     for tag in tags:
         try:
-            out.append(tag.format(**path_params))
+            out.append(tag.format(**capped))
         except (KeyError, IndexError):
             # Unknown placeholder — keep tag as-is rather than failing the request.
             out.append(tag)

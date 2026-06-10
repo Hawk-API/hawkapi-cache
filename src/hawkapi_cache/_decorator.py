@@ -92,7 +92,17 @@ def cache(
             )
             cache_key = plugin.key_prefix + base_key
 
-            cached = await plugin.backend.get(cache_key)
+            try:
+                cached = await plugin.backend.get(cache_key)
+            except Exception as exc:
+                # Backend outage (e.g. Redis down) — fail open: treat as a
+                # cache miss and serve from the handler rather than 500.
+                logger.warning(
+                    "cache: backend get failed for key %s, treating as miss: %s",
+                    cache_key,
+                    exc,
+                )
+                cached = None
             decoded: tuple[int, list[tuple[bytes, bytes]], bytes] | None = None
             if cached is not None:
                 try:
@@ -124,12 +134,22 @@ def cache(
 
             interpolated = interpolate_tags(tags, dict(request.path_params))
             raw_headers = response._build_raw_headers()  # pyright: ignore[reportPrivateUsage]
-            await plugin.backend.set(
-                cache_key,
-                encode(response.status_code, raw_headers, response.body),
-                ttl=ttl,
-                tags=interpolated,
-            )
+            try:
+                await plugin.backend.set(
+                    cache_key,
+                    encode(response.status_code, raw_headers, response.body),
+                    ttl=ttl,
+                    tags=interpolated,
+                )
+            except Exception as exc:
+                # Backend outage (e.g. Redis down) — fail open: serve the
+                # response uncached rather than 500.
+                logger.warning(
+                    "cache: backend set failed for key %s, serving uncached: %s",
+                    cache_key,
+                    exc,
+                )
+                return response
             response._headers["x-cache"] = "MISS"  # pyright: ignore[reportPrivateUsage]
             return response
 

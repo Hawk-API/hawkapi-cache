@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.2.1 — 2026-06-10
+
+Security hardening.
+
+### Changed
+
+- Cache backend `get` / `set` failures (e.g. a Redis outage) are now caught and
+  logged, degrading gracefully to a cache miss / uncached response instead of
+  surfacing a 500 (CWE-703).
+- Interpolated cache tag values are length-capped (256 chars) before use as
+  Redis key components, so a hostile path segment cannot inflate the tag-key
+  namespace (CWE-770).
+
 ## [0.2.0] - 2026-05-16
 
 Security hardening.
